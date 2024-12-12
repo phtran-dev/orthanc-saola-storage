@@ -16,8 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  **/
 
-
 #include "StorageArea.h"
+#include "SaolaConfiguration.h"
 
 #include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
@@ -25,13 +25,13 @@
 
 #include <boost/filesystem.hpp>
 
-static std::unique_ptr<StorageArea>  storageArea_;
+static std::unique_ptr<StorageArea> storageArea_;
 
-static const char* const ORTHANC_STORAGE = "OrthancStorage";
+static const char *const ORTHANC_STORAGE = "OrthancStorage";
 
-static const char* const STORAGE_DIRECTORY = "StorageDirectory";
+static const char *const STORAGE_DIRECTORY = "StorageDirectory";
 
-static const char* const MOUNT_DIRECTORY = "MountDirectory";
+static const char *const MOUNT_DIRECTORY = "MountDirectory";
 
 static OrthancPluginErrorCode StorageCreate(const char *uuid,
                                             const void *content,
@@ -43,7 +43,7 @@ static OrthancPluginErrorCode StorageCreate(const char *uuid,
     storageArea_->Create(uuid, content, size);
     return OrthancPluginErrorCode_Success;
   }
-  catch (Orthanc::OrthancException& e)
+  catch (Orthanc::OrthancException &e)
   {
     LOG(ERROR) << e.What();
     return static_cast<OrthancPluginErrorCode>(e.GetErrorCode());
@@ -53,7 +53,6 @@ static OrthancPluginErrorCode StorageCreate(const char *uuid,
     return OrthancPluginErrorCode_InternalError;
   }
 }
-
 
 static OrthancPluginErrorCode StorageReadRange(OrthancPluginMemoryBuffer64 *target,
                                                const char *uuid,
@@ -65,7 +64,7 @@ static OrthancPluginErrorCode StorageReadRange(OrthancPluginMemoryBuffer64 *targ
     storageArea_->ReadRange(target, uuid, rangeStart);
     return OrthancPluginErrorCode_Success;
   }
-  catch (Orthanc::OrthancException& e)
+  catch (Orthanc::OrthancException &e)
   {
     LOG(ERROR) << e.What();
     return static_cast<OrthancPluginErrorCode>(e.GetErrorCode());
@@ -75,7 +74,6 @@ static OrthancPluginErrorCode StorageReadRange(OrthancPluginMemoryBuffer64 *targ
     return OrthancPluginErrorCode_InternalError;
   }
 }
-
 
 static OrthancPluginErrorCode StorageReadWhole(OrthancPluginMemoryBuffer64 *target,
                                                const char *uuid,
@@ -86,7 +84,7 @@ static OrthancPluginErrorCode StorageReadWhole(OrthancPluginMemoryBuffer64 *targ
     storageArea_->ReadWhole(target, uuid);
     return OrthancPluginErrorCode_Success;
   }
-  catch (Orthanc::OrthancException& e)
+  catch (Orthanc::OrthancException &e)
   {
     LOG(ERROR) << e.What();
     return static_cast<OrthancPluginErrorCode>(e.GetErrorCode());
@@ -97,7 +95,6 @@ static OrthancPluginErrorCode StorageReadWhole(OrthancPluginMemoryBuffer64 *targ
   }
 }
 
-
 static OrthancPluginErrorCode StorageRemove(const char *uuid,
                                             OrthancPluginContentType type)
 {
@@ -106,7 +103,7 @@ static OrthancPluginErrorCode StorageRemove(const char *uuid,
     storageArea_->RemoveAttachment(uuid);
     return OrthancPluginErrorCode_Success;
   }
-  catch (Orthanc::OrthancException& e)
+  catch (Orthanc::OrthancException &e)
   {
     LOG(ERROR) << e.What();
     return static_cast<OrthancPluginErrorCode>(e.GetErrorCode());
@@ -119,7 +116,7 @@ static OrthancPluginErrorCode StorageRemove(const char *uuid,
 
 extern "C"
 {
-  ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
+  ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext *context)
   {
     OrthancPlugins::SetGlobalContext(context);
     Orthanc::Logging::InitializePluginContext(context);
@@ -136,23 +133,14 @@ extern "C"
 
     OrthancPluginSetDescription(context, "Synchronize Orthanc with directories containing DICOM files.");
 
-    OrthancPlugins::OrthancConfiguration configuration;
-
-    // OrthancPlugins::OrthancConfiguration indexer;
-    // configuration.GetSection(indexer, "Indexer");
-
-    // bool enabled = indexer.GetBooleanValue("Enable", false);
-    bool enabled = true; // For testing only
-    if (enabled)
+    if (SaolaConfiguration::Instance().IsEnabled())
     {
       try
       {
-        storageArea_.reset(new StorageArea(
-          configuration.GetStringValue(STORAGE_DIRECTORY, ORTHANC_STORAGE),
-          configuration.GetStringValue(MOUNT_DIRECTORY, "")
-          ));
+        OrthancPlugins::OrthancConfiguration configuration;
+        storageArea_.reset(new StorageArea(configuration.GetStringValue(STORAGE_DIRECTORY, ORTHANC_STORAGE)));
       }
-      catch (Orthanc::OrthancException& e)
+      catch (Orthanc::OrthancException &e)
       {
         return -1;
       }
@@ -166,26 +154,23 @@ extern "C"
     }
     else
     {
-      OrthancPlugins::LogWarning("OrthancItechStorage is disabled");
+      OrthancPlugins::LogWarning("OrthancSaolaStorage is disabled");
     }
 
     return 0;
   }
 
-
   ORTHANC_PLUGINS_API void OrthancPluginFinalize()
   {
-    OrthancPlugins::LogWarning("ItechStorage plugin is finalizing");
+    OrthancPlugins::LogWarning("OrthancSaolaStorage plugin is finalizing");
   }
 
-
-  ORTHANC_PLUGINS_API const char* OrthancPluginGetName()
+  ORTHANC_PLUGINS_API const char *OrthancPluginGetName()
   {
-    return "ItechStorage";
+    return "OrthancSaolaStorage";
   }
 
-
-  ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
+  ORTHANC_PLUGINS_API const char *OrthancPluginGetVersion()
   {
     return ORTHANC_PLUGIN_VERSION;
   }

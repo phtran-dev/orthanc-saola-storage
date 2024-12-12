@@ -29,8 +29,6 @@ class StorageArea : public boost::noncopyable
 private:
   std::string root_;
 
-  std::string mount_;
-
 public:
   static void ReadWholeFromPath(OrthancPluginMemoryBuffer64 *target,
                                 const std::string& path);  
@@ -39,7 +37,7 @@ public:
                                 const std::string& path,
                                 uint64_t rangeStart);
 
-  explicit StorageArea(const std::string& root, const std::string& mount);
+  explicit StorageArea(const std::string& root);
 
   void Create(const std::string& uuid,
               const void *content,

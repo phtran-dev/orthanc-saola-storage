@@ -116,6 +116,7 @@ add_custom_target(
           
 add_library(OrthancSaolaStorage SHARED
   Resources/Orthanc/Plugins/OrthancPluginCppWrapper.cpp
+  Sources/SaolaConfiguration.cpp
   Sources/Plugin.cpp
   Sources/StorageArea.cpp
   
