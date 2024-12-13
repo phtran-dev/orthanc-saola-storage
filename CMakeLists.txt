@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 project(OrthancItechStorage)
 
-set(ORTHANC_PLUGIN_VERSION "1.0.0")
+set(ORTHANC_PLUGIN_VERSION "1.1.0")
 
 if (ORTHANC_PLUGIN_VERSION STREQUAL "mainline")
   set(ORTHANC_FRAMEWORK_DEFAULT_VERSION "mainline")
