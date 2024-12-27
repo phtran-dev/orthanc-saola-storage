@@ -18,20 +18,117 @@
 
 #include "StorageArea.h"
 #include "SaolaConfiguration.h"
+#include "PendingDeletionsDatabase.h"
+#include "DeletionWorker.h"
 
 #include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
 #include <Logging.h>
+#include <Enumerations.h>
+#include <orthanc/OrthancCPlugin.h>
+#include <IDynamicObject.h>
 
 #include <boost/filesystem.hpp>
+#include <boost/thread.hpp>
 
-static std::unique_ptr<StorageArea> storageArea_;
+static std::shared_ptr<StorageArea> storageArea_;
 
 static const char *const ORTHANC_STORAGE = "OrthancStorage";
 
 static const char *const STORAGE_DIRECTORY = "StorageDirectory";
 
 static const char *const MOUNT_DIRECTORY = "MountDirectory";
+
+static const char *DELAYED_DELETION = "DelayedDeletion";
+
+class PendingDeletion : public Orthanc::IDynamicObject
+{
+private:
+  Orthanc::FileContentType type_;
+  std::string uuid_;
+
+public:
+  PendingDeletion(Orthanc::FileContentType type,
+                  const std::string &uuid) : type_(type),
+                                             uuid_(uuid)
+  {
+  }
+
+  Orthanc::FileContentType GetType() const
+  {
+    return type_;
+  }
+
+  const std::string &GetUuid() const
+  {
+    return uuid_;
+  }
+};
+
+static std::unique_ptr<Saola::DeletionWorker> deletionWorker_;
+
+static Orthanc::FileContentType Convert(OrthancPluginContentType type)
+{
+  switch (type)
+  {
+  case OrthancPluginContentType_Dicom:
+    return Orthanc::FileContentType_Dicom;
+
+  case OrthancPluginContentType_DicomAsJson:
+    return Orthanc::FileContentType_DicomAsJson;
+
+  case OrthancPluginContentType_DicomUntilPixelData:
+    return Orthanc::FileContentType_DicomUntilPixelData;
+
+  default:
+    return Orthanc::FileContentType_Unknown;
+  }
+}
+
+OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
+                                        OrthancPluginResourceType resourceType,
+                                        const char *resourceId)
+{
+  switch (changeType)
+  {
+  case OrthancPluginChangeType_OrthancStarted:
+    if (deletionWorker_.get() != NULL)
+    {
+      deletionWorker_->Start();
+    }
+
+    break;
+
+  case OrthancPluginChangeType_OrthancStopped:
+    if (deletionWorker_.get() != NULL)
+    {
+      deletionWorker_->Stop();
+    }
+
+    break;
+
+  default:
+    break;
+  }
+
+  return OrthancPluginErrorCode_Success;
+}
+
+void GetPluginStatus(OrthancPluginRestOutput *output,
+                     const char *url,
+                     const OrthancPluginHttpRequest *request)
+{
+
+  Json::Value status;
+  if (deletionWorker_.get() != NULL)
+  {
+    deletionWorker_->GetStatistics(status);
+  }
+
+  std::string s = status.toStyledString();
+  OrthancPluginAnswerBuffer(OrthancPlugins::GetGlobalContext(), output, s.c_str(),
+                            s.size(), "application/json");
+}
 
 static OrthancPluginErrorCode StorageCreate(const char *uuid,
                                             const void *content,
@@ -100,7 +197,15 @@ static OrthancPluginErrorCode StorageRemove(const char *uuid,
 {
   try
   {
-    storageArea_->RemoveAttachment(uuid);
+    // Delayed Deletion enabled
+    if (deletionWorker_.get() != NULL)
+    {
+      deletionWorker_->Enqueue(uuid, Convert(type));
+    }
+    else
+    {
+      storageArea_->RemoveAttachment(uuid);
+    }
     return OrthancPluginErrorCode_Success;
   }
   catch (Orthanc::OrthancException &e)
@@ -137,8 +242,14 @@ extern "C"
     {
       try
       {
-        OrthancPlugins::OrthancConfiguration configuration;
-        storageArea_.reset(new StorageArea(configuration.GetStringValue(STORAGE_DIRECTORY, ORTHANC_STORAGE)));
+        OrthancPlugins::OrthancConfiguration orthancConfig, delayedDeletionConfig;
+        orthancConfig.GetSection(delayedDeletionConfig, DELAYED_DELETION);
+
+        storageArea_.reset(new StorageArea(orthancConfig.GetStringValue(STORAGE_DIRECTORY, ORTHANC_STORAGE)));
+        if (delayedDeletionConfig.GetBooleanValue("Enable", false))
+        {
+          deletionWorker_.reset(new Saola::DeletionWorker(storageArea_));
+        }
       }
       catch (Orthanc::OrthancException &e)
       {
@@ -151,6 +262,8 @@ extern "C"
       }
 
       OrthancPluginRegisterStorageArea2(context, StorageCreate, StorageReadWhole, StorageReadRange, StorageRemove);
+      OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
+      OrthancPlugins::RegisterRestCallback<GetPluginStatus>("/plugins/delayed-deletion/status", true);
     }
     else
     {
@@ -167,7 +280,7 @@ extern "C"
 
   ORTHANC_PLUGINS_API const char *OrthancPluginGetName()
   {
-    return "OrthancSaolaStorage";
+    return ORTHANC_PLUGIN_NAME;
   }
 
   ORTHANC_PLUGINS_API const char *OrthancPluginGetVersion()

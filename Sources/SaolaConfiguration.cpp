@@ -14,7 +14,7 @@ SaolaConfiguration::SaolaConfiguration(/* args */)
 
   this->mount_directory_ = saola.GetStringValue("MountDirectory", "fs1");
 
-  std::string format = saola.GetStringValue("StoragePathFormat", "Full");
+  std::string format = saola.GetStringValue("StoragePathFormat", "FULL");
   Orthanc::Toolbox::ToUpperCase(format);
   if (format == "FULL")
   {

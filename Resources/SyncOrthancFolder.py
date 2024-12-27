@@ -11,7 +11,7 @@ import stat
 import urllib.request
 
 TARGET = os.path.join(os.path.dirname(__file__), 'Orthanc')
-PLUGIN_SDK_VERSION = '1.9.0'
+PLUGIN_SDK_VERSION = [ '1.12.1' ]
 REPOSITORY = 'https://orthanc.uclouvain.be/hg/orthanc/raw-file'
 
 FILES = [
@@ -31,6 +31,9 @@ FILES = [
     ('OrthancServer/Plugins/Samples/Common/OrthancPluginException.h', 'Plugins'),
     ('OrthancServer/Plugins/Samples/Common/OrthancPluginsExports.cmake', 'Plugins'),
     ('OrthancServer/Plugins/Samples/Common/VersionScriptPlugins.map', 'Plugins'),
+
+    # Specific to DICOMweb plugin
+    ('OrthancServer/Resources/OrthancLogo.png', '.'),
 ]
 
 SDK = [
@@ -55,7 +58,7 @@ def Download(x):
         try:
             f.write(urllib.request.urlopen(url).read())
         except:
-            print('ERROR: %s' % url)
+            print('ERROR %s' % url)
             raise
 
 
@@ -67,11 +70,12 @@ for f in FILES:
                       os.path.join(f[1], os.path.basename(f[0])) ])
 
 for f in SDK:
-    commands.append([
-        'Orthanc-%s' % PLUGIN_SDK_VERSION, 
-        'OrthancServer/Plugins/Include/%s' % f,
-        'Sdk-%s/%s' % (PLUGIN_SDK_VERSION, f) 
-    ])
+    for version in PLUGIN_SDK_VERSION:
+        commands.append([
+            'Orthanc-%s' % version,
+            'OrthancServer/Plugins/Include/%s' % f,
+            'Sdk-%s/%s' % (version, f)
+        ])
 
 
 pool = multiprocessing.Pool(10)  # simultaneous downloads
