@@ -39,8 +39,6 @@ static const char *const STORAGE_DIRECTORY = "StorageDirectory";
 
 static const char *const MOUNT_DIRECTORY = "MountDirectory";
 
-static const char *DELAYED_DELETION = "DelayedDeletion";
-
 class PendingDeletion : public Orthanc::IDynamicObject
 {
 private:
@@ -242,11 +240,10 @@ extern "C"
     {
       try
       {
-        OrthancPlugins::OrthancConfiguration orthancConfig, delayedDeletionConfig;
-        orthancConfig.GetSection(delayedDeletionConfig, DELAYED_DELETION);
+        OrthancPlugins::OrthancConfiguration orthancConfig;
 
         storageArea_.reset(new StorageArea(orthancConfig.GetStringValue(STORAGE_DIRECTORY, ORTHANC_STORAGE)));
-        if (delayedDeletionConfig.GetBooleanValue("Enable", false))
+        if (SaolaConfiguration::Instance().DelayedDeletionEnable())
         {
           deletionWorker_.reset(new Saola::DeletionWorker(storageArea_));
         }

@@ -21,8 +21,6 @@ namespace Saola
 
     std::string databaseServerIdentifier_;
 
-    int throttleDelayMs_;
-
     std::thread *m_worker;
 
     std::unique_ptr<Saola::PendingDeletionsDatabase> db_;
@@ -34,14 +32,13 @@ namespace Saola
     void Run();
 
   public:
-
-    DeletionWorker(std::shared_ptr<StorageArea>& storageArea);
+    DeletionWorker(std::shared_ptr<StorageArea> &storageArea);
 
     ~DeletionWorker();
 
-    void GetStatistics(Json::Value& status);
+    void GetStatistics(Json::Value &status);
 
-    void Enqueue(const std::string& uuid, Orthanc::FileContentType type);
+    void Enqueue(const std::string &uuid, Orthanc::FileContentType type);
 
     void Start();
 

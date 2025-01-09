@@ -14,6 +14,12 @@ private:
 
   std::string mount_directory_;
 
+  bool delayedDeletionEnable_;
+
+  int delayedDeletionThrottleDelayMs_ = 0;
+
+  std::string delayedDeletionPath_;
+
   SaolaConfiguration(/* args */);
 
 public:
@@ -25,5 +31,11 @@ public:
   bool IsStoragePathFormatFull() const;
 
   const std::string& GetMountDirectory() const;
+
+  bool DelayedDeletionEnable() const;
+
+  int DelayedDeletionThrottleDelayMs() const;
+
+  const std::string& DelayedDeletionPath() const;
 
 };
