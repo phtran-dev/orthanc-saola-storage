@@ -24,6 +24,7 @@
 
 #include <SQLite/Statement.h>
 #include <SQLite/Transaction.h>
+#include <Logging.h>
 
 namespace Saola
 {
@@ -52,7 +53,9 @@ void PendingDeletionsDatabase::Setup()
 
 PendingDeletionsDatabase::PendingDeletionsDatabase(const std::string& path)
 {
+  LOG(INFO) << "PHONG path=" << path;
   db_.Open(path);
+  LOG(INFO) << "PHONG END path=" << path;
   Setup();
 }
   

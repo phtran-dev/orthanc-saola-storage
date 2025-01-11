@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 2.8)
 project(OrthancItechStorage)
 
 set(ORTHANC_PLUGIN_VERSION "1.2.1")
-SET(PLUGIN_NAME "OrthancSaolaStorage" CACHE STRING "Name of the plugin")
+SET(PLUGIN_NAME "orthanc-saola-storage" CACHE STRING "Name of the plugin")
 
 if (ORTHANC_PLUGIN_VERSION STREQUAL "mainline")
   set(ORTHANC_FRAMEWORK_DEFAULT_VERSION "mainline")

@@ -53,23 +53,21 @@ namespace Saola
 
   void DeletionWorker::Start()
   {
-    LOG(WARNING) << "[SaolaStorage][DelayedDeletion] - Starting the deletion thread";
+    LOG(INFO) << "[SaolaStorage][DelayedDeletion] - Starting the deletion thread";
+    static const unsigned int GRANULARITY = 100;
     if (this->m_state != State_Setup)
     {
       throw Orthanc::OrthancException(Orthanc::ErrorCode_BadSequenceOfCalls);
     }
 
     this->m_state = State_Running;
-    const auto intervalSeconds = 10;
-    this->m_worker = new std::thread([this, intervalSeconds]()
+
+    this->m_worker = new std::thread([this]()
                                      {
     while (this->m_state == State_Running)
     {
       this->Run();
-      for (unsigned int i = 0; i < intervalSeconds * 10; i++)
-      {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(GRANULARITY));
     } });
   }
 
@@ -102,14 +100,7 @@ namespace Saola
   {
     databaseServerIdentifier_ = OrthancPluginGetDatabaseServerIdentifier(OrthancPlugins::GetGlobalContext());
 
-    LOG(WARNING) << "[SaolaStorage][DelayedDeletion] - Path to the storage area: " << SaolaConfiguration::Instance().DelayedDeletionPath();
-
-    boost::filesystem::path defaultDbPath = boost::filesystem::path(SaolaConfiguration::Instance().DelayedDeletionPath()) / (std::string("saola-storage-pending-deletions.") + databaseServerIdentifier_ + ".db");
-    std::string dbPath = defaultDbPath.string();
-
-    LOG(WARNING) << "[SaolaStorage][DelayedDeletion] - Path to the SQLite database: " << dbPath;
-
-    db_.reset(new Saola::PendingDeletionsDatabase(dbPath));
+    db_.reset(new Saola::PendingDeletionsDatabase(SaolaConfiguration::Instance().DelayedDeletionPath()));
   }
 
   DeletionWorker::~DeletionWorker()

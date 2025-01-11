@@ -3,32 +3,42 @@
 
 #include <Toolbox.h>
 #include <Logging.h>
+#include <boost/filesystem.hpp>
 
+
+static const char *ENABLE = "Enable";
 static const char *DELAYED_DELETION = "DelayedDeletion";
+static const char *SAOLA_STORAGE = "SaolaStorage";
+static const char *MOUNT_DIRECTORY = "MountDirectory";
+static const char *STORAGE_PATH_FORMAT = "StoragePathFormat";
 
 SaolaConfiguration::SaolaConfiguration(/* args */)
 {
-  OrthancPlugins::OrthancConfiguration configuration;
-  OrthancPlugins::OrthancConfiguration saola, delayDeletion;
-  configuration.GetSection(saola, "SaolaStorage");
-  saola.GetSection(delayDeletion, DELAYED_DELETION);
+  OrthancPlugins::OrthancConfiguration orthancConfig;
+  OrthancPlugins::OrthancConfiguration saola, delayedDeletionConfig;
+  orthancConfig.GetSection(saola, SAOLA_STORAGE);
+  saola.GetSection(delayedDeletionConfig, DELAYED_DELETION);
 
-  this->enable_ = saola.GetBooleanValue("Enable", false);
+  this->enable_ = saola.GetBooleanValue(ENABLE, false);
 
-  this->mount_directory_ = saola.GetStringValue("MountDirectory", "fs1");
+  this->mount_directory_ = saola.GetStringValue(MOUNT_DIRECTORY, "fs1");
 
-  std::string format = saola.GetStringValue("StoragePathFormat", "FULL");
+  std::string format = saola.GetStringValue(STORAGE_PATH_FORMAT, "FULL");
   Orthanc::Toolbox::ToUpperCase(format);
   if (format == "FULL")
   {
     this->is_storage_path_format_full_ = true;
   }
 
-  this->delayedDeletionEnable_ = delayDeletion.GetBooleanValue("Enable", false);
+  this->delayedDeletionEnable_ = delayedDeletionConfig.GetBooleanValue(ENABLE, false);
+  this->delayedDeletionThrottleDelayMs_ = delayedDeletionConfig.GetIntegerValue("ThrottleDelayMs", 0);
 
-  this->delayedDeletionThrottleDelayMs_ = delayDeletion.GetIntegerValue("ThrottleDelayMs", 0);
-
-  this->delayedDeletionPath_ = delayDeletion.GetStringValue("Path", "");
+  const char *databaseServerIdentifier_ = OrthancPluginGetDatabaseServerIdentifier(OrthancPlugins::GetGlobalContext());
+  std::string pathStorage = orthancConfig.GetStringValue("StorageDirectory", "OrthancStorage");
+  LOG(WARNING) << "DelayedDeletion - Path to the storage area: " << pathStorage;
+  boost::filesystem::path defaultDbPath = boost::filesystem::path(pathStorage) / (std::string("pending-deletions.") + databaseServerIdentifier_ + ".db");
+  this->delayedDeletionPath_ = delayedDeletionConfig.GetStringValue("Path", defaultDbPath.string());
+  LOG(WARNING) << "DelayedDeletion - Path to the SQLite database: " << this->delayedDeletionPath_;
 }
 
 SaolaConfiguration &SaolaConfiguration::Instance()

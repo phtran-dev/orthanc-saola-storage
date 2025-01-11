@@ -90,8 +90,9 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
   switch (changeType)
   {
   case OrthancPluginChangeType_OrthancStarted:
-    if (deletionWorker_.get() != NULL)
+    if (SaolaConfiguration::Instance().DelayedDeletionEnable())
     {
+      deletionWorker_.reset(new Saola::DeletionWorker(storageArea_));
       deletionWorker_->Start();
     }
 
@@ -234,7 +235,7 @@ extern "C"
       return -1;
     }
 
-    OrthancPluginSetDescription(context, "Synchronize Orthanc with directories containing DICOM files.");
+    OrthancPluginSetDescription(context, "Implementation of  OrthancStorage with supporting multiple storage directories");
 
     if (SaolaConfiguration::Instance().IsEnabled())
     {
@@ -243,10 +244,6 @@ extern "C"
         OrthancPlugins::OrthancConfiguration orthancConfig;
 
         storageArea_.reset(new StorageArea(orthancConfig.GetStringValue(STORAGE_DIRECTORY, ORTHANC_STORAGE)));
-        if (SaolaConfiguration::Instance().DelayedDeletionEnable())
-        {
-          deletionWorker_.reset(new Saola::DeletionWorker(storageArea_));
-        }
       }
       catch (Orthanc::OrthancException &e)
       {
