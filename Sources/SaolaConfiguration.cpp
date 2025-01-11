@@ -7,6 +7,7 @@
 
 
 static const char *ENABLE = "Enable";
+static const char* ROOT = "Root";
 static const char *DELAYED_DELETION = "DelayedDeletion";
 static const char *SAOLA_STORAGE = "SaolaStorage";
 static const char *MOUNT_DIRECTORY = "MountDirectory";
@@ -20,6 +21,8 @@ SaolaConfiguration::SaolaConfiguration(/* args */)
   saola.GetSection(delayedDeletionConfig, DELAYED_DELETION);
 
   this->enable_ = saola.GetBooleanValue(ENABLE, false);
+
+  this->root_ = saola.GetStringValue(ROOT, "/saola/");
 
   this->mount_directory_ = saola.GetStringValue(MOUNT_DIRECTORY, "fs1");
 
@@ -55,6 +58,11 @@ bool SaolaConfiguration::IsEnabled() const
 bool SaolaConfiguration::IsStoragePathFormatFull() const
 {
   return this->is_storage_path_format_full_;
+}
+
+const std::string& SaolaConfiguration::GetRoot() const
+{
+  return this->root_;
 }
 
 const std::string &SaolaConfiguration::GetMountDirectory() const

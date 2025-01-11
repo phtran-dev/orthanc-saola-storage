@@ -257,7 +257,7 @@ extern "C"
 
       OrthancPluginRegisterStorageArea2(context, StorageCreate, StorageReadWhole, StorageReadRange, StorageRemove);
       OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
-      OrthancPlugins::RegisterRestCallback<GetPluginStatus>("/plugins/delayed-deletion/status", true);
+      OrthancPlugins::RegisterRestCallback<GetPluginStatus>(SaolaConfiguration::Instance().GetRoot() + "/delayed-deletion/status", true);
     }
     else
     {

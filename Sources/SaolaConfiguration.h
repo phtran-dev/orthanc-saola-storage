@@ -12,6 +12,8 @@ private:
 
   bool is_storage_path_format_full_ = false;
 
+  std::string root_;
+
   std::string mount_directory_;
 
   bool delayedDeletionEnable_;
@@ -29,6 +31,8 @@ public:
   bool IsEnabled() const;
 
   bool IsStoragePathFormatFull() const;
+
+  const std::string& GetRoot() const;
 
   const std::string& GetMountDirectory() const;
 
