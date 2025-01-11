@@ -33,6 +33,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
 
+static const char *EXTENSION = ".symlink";
+
+static const char *const STUDY_INSTANCE_UID = "0020,000d";
+static const char *const SERIES_INSTANCE_UID = "0020,000e";
+static const char *const PIXEL_DATA = "7fe0,0010";
+
 static boost::filesystem::path GetPathInternal(const std::string &root,
                                                const std::string &uuid)
 {
@@ -95,9 +101,6 @@ static boost::filesystem::path CreateMountDirectory(const std::string &uuid,
     path /= std::string(&date[6]);
     if (SaolaConfiguration::Instance().IsStoragePathFormatFull())
     {
-      static const char *const STUDY_INSTANCE_UID = "0020,000d";
-      static const char *const SERIES_INSTANCE_UID = "0020,000e";
-
       OrthancPlugins::OrthancString s;
       s.Assign(OrthancPluginDicomBufferToJson(OrthancPlugins::GetGlobalContext(), content, size,
                                               OrthancPluginDicomToJsonFormat_Short,
@@ -300,7 +303,7 @@ void StorageArea::Create(const std::string &uuid,
 
     try
     {
-      Orthanc::SystemToolbox::WriteFile(mount_path.string().c_str(), mount_path.string().size(), root_path.string(), false);
+      Orthanc::SystemToolbox::WriteFile(mount_path.string().c_str(), mount_path.string().size(), root_path.string() + EXTENSION, false);
       Orthanc::SystemToolbox::WriteFile(content, size, mount_path.string(), false);
       LOG(INFO) << "StorageArea::Create created attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, size) << ")";
       return;
@@ -341,9 +344,18 @@ void StorageArea::ReadWhole(std::string &target,
   Orthanc::Toolbox::ElapsedTimer timer;
   LOG(INFO) << "StorageArea::ReadWhole string attachment \"" << uuid << "\"";
 
-  std::string floc;
-  Orthanc::SystemToolbox::ReadFile(floc, GetPathInternal(root_, uuid).string());
-  Orthanc::SystemToolbox::ReadFile(target, floc);
+  boost::filesystem::path root_path = GetPathInternal(root_, uuid).string();
+  std::string root_path_extension = root_path.string() + EXTENSION;
+  if (Orthanc::SystemToolbox::IsExistingFile(root_path_extension))
+  {
+    std::string floc;
+    Orthanc::SystemToolbox::ReadFile(floc, root_path_extension);
+    Orthanc::SystemToolbox::ReadFile(target, floc);
+  }
+  else
+  {
+    Orthanc::SystemToolbox::ReadFile(target, root_path.c_str());
+  }
 
   LOG(INFO) << "StorageArea::ReadWhole string attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target.size()) << ")";
 }
@@ -354,10 +366,19 @@ void StorageArea::ReadWhole(OrthancPluginMemoryBuffer64 *target,
   Orthanc::Toolbox::ElapsedTimer timer;
   LOG(INFO) << "StorageArea::ReadWhole OrthancPluginMemoryBuffer64 attachment \"" << uuid << "\"";
 
-  std::string floc;
-  Orthanc::SystemToolbox::ReadFile(floc, GetPathInternal(root_, uuid).string());
+  boost::filesystem::path root_path = GetPathInternal(root_, uuid).string();
+  std::string root_path_extension = root_path.string() + EXTENSION;
+  if (Orthanc::SystemToolbox::IsExistingFile(root_path_extension))
+  {
+    std::string floc;
+    Orthanc::SystemToolbox::ReadFile(floc, root_path_extension);
+    ReadWholeFromPath(target, floc);
+  }
+  else
+  {
+    ReadWholeFromPath(target, root_path.string());
+  }
 
-  ReadWholeFromPath(target, floc);
   LOG(INFO) << "StorageArea::ReadWhole OrthancPluginMemoryBuffer64 attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
 }
 
@@ -367,9 +388,19 @@ void StorageArea::ReadRange(OrthancPluginMemoryBuffer64 *target,
 {
   Orthanc::Toolbox::ElapsedTimer timer;
   LOG(INFO) << "StorageArea::ReadRange attachment \"" << uuid << "\" content type (range from: " << rangeStart << ")";
-  std::string floc;
-  Orthanc::SystemToolbox::ReadFile(floc, GetPathInternal(root_, uuid).string());
-  ReadRangeFromPath(target, floc, rangeStart);
+
+  boost::filesystem::path root_path = GetPathInternal(root_, uuid).string();
+  std::string root_path_extension = root_path.string() + EXTENSION;
+  if (Orthanc::SystemToolbox::IsExistingFile(root_path_extension))
+  {
+    std::string floc;
+    Orthanc::SystemToolbox::ReadFile(floc, root_path_extension);
+    ReadRangeFromPath(target, floc, rangeStart);
+  }
+  else
+  {
+    ReadRangeFromPath(target, root_path.string(), rangeStart);
+  }
 
   LOG(INFO) << "StorageArea::ReadRange attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
 }
@@ -381,25 +412,41 @@ void StorageArea::RemoveAttachment(const std::string &uuid)
 
   boost::filesystem::path root_path = GetPathInternal(root_, uuid);
 
-  std::string floc;
-  Orthanc::SystemToolbox::ReadFile(floc, root_path.string());
-  boost::filesystem::path mount_path = floc;
-
   try
   {
-    boost::system::error_code err;
-    boost::filesystem::remove(root_path, err);
-    boost::filesystem::remove(root_path.parent_path(), err);
-    boost::filesystem::remove(root_path.parent_path().parent_path(), err);
+    if (Orthanc::SystemToolbox::IsExistingFile(root_path.string() + EXTENSION))
+    {
+      LOG(INFO) << "StorageArea::RemoveAttachment Found and Deleting symlink file " << root_path.string() + EXTENSION;
+      root_path.concat(EXTENSION);
 
-    boost::filesystem::remove(mount_path, err);
-    boost::filesystem::remove(mount_path.parent_path(), err);
-    boost::filesystem::remove(mount_path.parent_path().parent_path(), err);
+      std::string floc;
+      Orthanc::SystemToolbox::ReadFile(floc, root_path.string());
+      boost::filesystem::path mount_path = floc;
+
+      boost::system::error_code err;
+      boost::filesystem::remove(root_path, err);
+      boost::filesystem::remove(root_path.parent_path(), err);
+      boost::filesystem::remove(root_path.parent_path().parent_path(), err);
+
+      LOG(INFO) << "StorageArea::RemoveAttachment Found and Deleting mount file " << mount_path;
+      boost::filesystem::remove(mount_path, err);
+      boost::filesystem::remove(mount_path.parent_path(), err);
+      boost::filesystem::remove(mount_path.parent_path().parent_path(), err);
+    }
+    else
+    {
+      LOG(INFO) << "StorageArea::RemoveAttachment Deleting regular file " << root_path.string() + EXTENSION;
+      boost::system::error_code err;
+      boost::filesystem::remove(root_path, err);
+      boost::filesystem::remove(root_path.parent_path(), err);
+      boost::filesystem::remove(root_path.parent_path().parent_path(), err);
+    }
   }
   catch (...)
   {
     // Ignore the error
   }
+
   LOG(INFO) << "StorageArea::RemoveAttachment deleted attachment \"" << uuid << "\" (" << timer.GetHumanElapsedDuration() << ")";
 }
 

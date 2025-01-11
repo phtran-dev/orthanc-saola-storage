@@ -53,9 +53,7 @@ void PendingDeletionsDatabase::Setup()
 
 PendingDeletionsDatabase::PendingDeletionsDatabase(const std::string& path)
 {
-  LOG(INFO) << "PHONG path=" << path;
   db_.Open(path);
-  LOG(INFO) << "PHONG END path=" << path;
   Setup();
 }
   
