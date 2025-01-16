@@ -235,7 +235,7 @@ extern "C"
       return -1;
     }
 
-    OrthancPluginSetDescription(context, "Implementation of  OrthancStorage with supporting multiple storage directories");
+    OrthancPluginSetDescription(context, "Implementation of OrthancStorage with supporting multiple storage directories");
 
     if (SaolaConfiguration::Instance().IsEnabled())
     {
@@ -247,11 +247,12 @@ extern "C"
       }
       catch (Orthanc::OrthancException &e)
       {
+        LOG(ERROR) << "[SaolaStorage] ERROR Initialization OrthancException " << e.What();
         return -1;
       }
       catch (...)
       {
-        LOG(ERROR) << "Native exception while initializing the plugin";
+        LOG(ERROR) << "[SaolaStorage] ERROR Native exception while initializing the plugin";
         return -1;
       }
 

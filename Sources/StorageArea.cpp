@@ -32,12 +32,16 @@
 
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
+#include <boost/regex.hpp>
+
+static const boost::regex REGEX_STUDY_DATE("\\d{4}(0[1-9]|1[012])(0[1-9]|[12][0-9]|3[01])");
 
 static const char *EXTENSION = ".symlink";
 
 static const char *const STUDY_INSTANCE_UID = "0020,000d";
 static const char *const SERIES_INSTANCE_UID = "0020,000e";
 static const char *const PIXEL_DATA = "7fe0,0010";
+static const char *const STUDY_DATE = "0008,0020";
 
 static boost::filesystem::path GetPathInternal(const std::string &root,
                                                const std::string &uuid)
@@ -96,27 +100,61 @@ static boost::filesystem::path CreateMountDirectory(const std::string &uuid,
     boost::filesystem::path path = SaolaConfiguration::Instance().GetMountDirectory();
     path /= "dicom";
 
-    path /= std::string(&date[0], &date[4]);
-    path /= std::string(&date[4], &date[6]);
-    path /= std::string(&date[6]);
-    if (SaolaConfiguration::Instance().IsStoragePathFormatFull())
+    try
     {
-      OrthancPlugins::OrthancString s;
-      s.Assign(OrthancPluginDicomBufferToJson(OrthancPlugins::GetGlobalContext(), content, size,
-                                              OrthancPluginDicomToJsonFormat_Short,
-                                              OrthancPluginDicomToJsonFlags_None, 256));
+      if (SaolaConfiguration::Instance().IsStoragePathFormatFull())
+      {
+        OrthancPlugins::OrthancString s;
+        s.Assign(OrthancPluginDicomBufferToJson(OrthancPlugins::GetGlobalContext(), content, size,
+                                                OrthancPluginDicomToJsonFormat_Short,
+                                                OrthancPluginDicomToJsonFlags_None, 256));
 
-      Json::Value json;
-      s.ToJson(json);
+        Json::Value json;
+        s.ToJson(json);
 
-      const std::string &studyInstanceUID = Orthanc::SerializationToolbox::ReadString(json, STUDY_INSTANCE_UID);
-      const std::string &seriesInstanceUID = Orthanc::SerializationToolbox::ReadString(json, SERIES_INSTANCE_UID);
+        if (json.isMember(STUDY_DATE) && json[STUDY_DATE].type() == Json::stringValue)
+        {
+          std::string studyDate = Orthanc::SerializationToolbox::ReadString(json, STUDY_DATE);
+          if (studyDate.size() >= date.size() && boost::regex_match(studyDate, REGEX_STUDY_DATE))
+          {
+            date = studyDate;
+          }
+          else
+          {
+            LOG(ERROR) << "[SaolaStorage][CreateMountDirectory] ERROR StudyDate " << studyDate << " is not standard";
+          }
+        }
+        else
+        {
+          LOG(ERROR) << "[SaolaStorage][CreateMountDirectory] ERROR Cannot find tag StudyDate " << STUDY_DATE;
+        }
 
-      path /= studyInstanceUID;
-      path /= seriesInstanceUID;
+        const std::string &studyInstanceUID = Orthanc::SerializationToolbox::ReadString(json, STUDY_INSTANCE_UID);
+        const std::string &seriesInstanceUID = Orthanc::SerializationToolbox::ReadString(json, SERIES_INSTANCE_UID);
+
+        path /= std::string(&date[0], &date[4]);
+        path /= std::string(&date[4], &date[6]);
+        path /= std::string(&date[6]);
+        path /= studyInstanceUID;
+        path /= seriesInstanceUID;
+      }
+      else
+      {
+        path /= std::string(&date[0], &date[4]);
+        path /= std::string(&date[4], &date[6]);
+        path /= std::string(&date[6]);
+        path /= std::string(&uuid[0], &uuid[2]);
+        path /= std::string(&uuid[2], &uuid[4]);
+      }
     }
-    else
+    catch (...)
     {
+      LOG(ERROR) << "[SaolaStorage][CreateMountDirectory] ERROR Exception. Rollback to default configuration";
+      path = SaolaConfiguration::Instance().GetMountDirectory();
+      path /= "dicom";
+      path /= std::string(&date[0], &date[4]);
+      path /= std::string(&date[4], &date[6]);
+      path /= std::string(&date[6]);
       path /= std::string(&uuid[0], &uuid[2]);
       path /= std::string(&uuid[2], &uuid[4]);
     }
@@ -154,13 +192,13 @@ void StorageArea::ReadWholeFromPath(OrthancPluginMemoryBuffer64 *target,
                                     const std::string &path)
 {
   Orthanc::Toolbox::ElapsedTimer timer;
-  LOG(INFO) << "StorageArea::ReadWholeFromPath path \"" << path << "\"";
+  LOG(INFO) << "SaolaStorageArea::ReadWholeFromPath path \"" << path << "\"";
 
   std::string content;
   Orthanc::SystemToolbox::ReadFile(content, path);
   CreateOrthancBuffer(target, content);
 
-  LOG(INFO) << "StorageArea::ReadWholeFromPath path \"" << path << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
+  LOG(INFO) << "SaolaStorageArea::ReadWholeFromPath path \"" << path << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
 }
 
 void StorageArea::ReadRangeFromPath(OrthancPluginMemoryBuffer64 *target,
@@ -168,7 +206,7 @@ void StorageArea::ReadRangeFromPath(OrthancPluginMemoryBuffer64 *target,
                                     uint64_t rangeStart)
 {
   Orthanc::Toolbox::ElapsedTimer timer;
-  LOG(INFO) << "StorageArea::ReadRangeFromPath path \"" << path << "\" (range from: " << rangeStart << ")";
+  LOG(INFO) << "SaolaStorageArea::ReadRangeFromPath path \"" << path << "\" (range from: " << rangeStart << ")";
 
   std::string content;
   Orthanc::SystemToolbox::ReadFileRange(
@@ -183,7 +221,7 @@ void StorageArea::ReadRangeFromPath(OrthancPluginMemoryBuffer64 *target,
     memcpy(target->data, content.c_str(), content.size());
   }
 
-  LOG(INFO) << "StorageArea::ReadRangeFromPath path \"" << path << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
+  LOG(INFO) << "SaolaStorageArea::ReadRangeFromPath path \"" << path << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
 }
 
 StorageArea::StorageArea(const std::string &root) : root_(root)
@@ -199,14 +237,14 @@ StorageArea::StorageArea(const std::string &root) : root_(root)
     if ((perms & boost::filesystem::perms::owner_read) == boost::filesystem::perms::no_perms ||
         (perms & boost::filesystem::perms::owner_write) == boost::filesystem::perms::no_perms)
     {
-      LOG(ERROR) << "[SaolaStorageArea] StorageDirectory " << root_path << " is not accessible";
+      LOG(ERROR) << "[SaolaStorageArea] ERROR StorageDirectory " << root_path << " is not accessible";
       throw Orthanc::OrthancException(Orthanc::ErrorCode_CannotWriteFile);
     }
   }
 
   if (SaolaConfiguration::Instance().GetMountDirectory().empty())
   {
-    LOG(ERROR) << "[SaolaStorageArea] MountDirectory should not be null or empty";
+    LOG(ERROR) << "[SaolaStorageArea] ERROR MountDirectory should not be null or empty";
     throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange);
   }
 
@@ -216,7 +254,7 @@ StorageArea::StorageArea(const std::string &root) : root_(root)
     if ((perms & boost::filesystem::perms::owner_read) == boost::filesystem::perms::no_perms ||
         (perms & boost::filesystem::perms::owner_write) == boost::filesystem::perms::no_perms)
     {
-      LOG(ERROR) << "[SaolaStorageArea] MountDirectory " << mount_path << " is not accessible";
+      LOG(ERROR) << "[SaolaStorageArea] ERROR MountDirectory " << mount_path << " is not accessible";
       throw Orthanc::OrthancException(Orthanc::ErrorCode_CannotWriteFile);
     }
   }
@@ -231,7 +269,7 @@ void StorageArea::Create(const std::string &uuid,
   boost::filesystem::path mount_path = CreateMountDirectory(uuid, content, size);
 
   Orthanc::Toolbox::ElapsedTimer timer;
-  LOG(INFO) << "StorageArea::Create creating attachment \"" << uuid << "\" to (root=" << root_path << ", mount_path=" << mount_path << ")";
+  LOG(INFO) << "SaolaStorageArea::Create creating attachment \"" << uuid << "\" to (root=" << root_path << ", mount_path=" << mount_path << ")";
 
   // In very unlikely cases, a thread could be deleting a
   // directory while another thread needs it -> introduce 3 retries at 1 ms interval
@@ -252,7 +290,7 @@ void StorageArea::Create(const std::string &uuid,
     {
       if (!boost::filesystem::is_directory(root_path.parent_path()))
       {
-        LOG(ERROR) << "[SaolaStorageArea] Root directory: " << root_path.parent_path() << " is existed but not a directory";
+        LOG(ERROR) << "[SaolaStorageArea] ERROR Root directory: " << root_path.parent_path() << " is existed but not a directory";
         throw Orthanc::OrthancException(Orthanc::ErrorCode_DirectoryOverFile);
       }
     }
@@ -279,7 +317,7 @@ void StorageArea::Create(const std::string &uuid,
     {
       if (!boost::filesystem::is_directory(mount_path.parent_path()))
       {
-        LOG(ERROR) << "[SaolaStorageArea] Mount directory: " << mount_path.parent_path() << " is existed but not a directory";
+        LOG(ERROR) << "[SaolaStorageArea] ERROR Mount directory: " << mount_path.parent_path() << " is existed but not a directory";
         // throw Orthanc::OrthancException(Orthanc::ErrorCode_DirectoryOverFile);
       }
     }
@@ -295,7 +333,7 @@ void StorageArea::Create(const std::string &uuid,
             || er.code() == boost::system::errc::not_a_directory) // one of the element of the parent_path is not a directory
         {
           throw Orthanc::OrthancException(Orthanc::ErrorCode_DirectoryOverFile,
-                                          std::string("[SaolaStorageArea] Parent mount directory: ") + mount_path.parent_path().c_str() + " is a file"); // no need to retry this error
+                                          std::string("[SaolaStorageArea] ERROR Parent mount directory: ") + mount_path.parent_path().c_str() + " is a file"); // no need to retry this error
         }
         // ignore other errors and retry
       }
@@ -305,7 +343,7 @@ void StorageArea::Create(const std::string &uuid,
     {
       Orthanc::SystemToolbox::WriteFile(mount_path.string().c_str(), mount_path.string().size(), root_path.string() + EXTENSION, false);
       Orthanc::SystemToolbox::WriteFile(content, size, mount_path.string(), false);
-      LOG(INFO) << "StorageArea::Create created attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, size) << ")";
+      LOG(INFO) << "SaolaStorageArea::Create created attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, size) << ")";
       return;
     }
     catch (Orthanc::OrthancException &ex)
@@ -317,32 +355,13 @@ void StorageArea::Create(const std::string &uuid,
       }
     }
   }
-  // LOG(INFO) << "StorageArea::Create created attachment \"" << uuid << "\" (" << timer.GetHumanElapsedDuration() << ")";
-
-  // boost::system::error_code se;
-
-  // boost::filesystem::create_symlink(realpath(path.c_str(), NULL), sym_path);
-  // boost::filesystem::create_symlink(mount_path, relative, se);
-  // if (se.failed())
-  // {
-  //   LOG(ERROR) << "[ItechStorageArea] Cannot create symlink from " << mount_path << " to " << relative;
-  //   throw Orthanc::OrthancException(Orthanc::ErrorCode_FileStorageCannotWrite);
-  // }
-
-  // auto relative = boost::filesystem::relative(mount_path.parent_path(), root_path.parent_path());
-  // boost::filesystem::create_symlink(relative /= uuid , root_path, se);
-  // if (se.failed())
-  // {
-  //   LOG(ERROR) << "[ItechStorageArea] Cannot create symlink from " << mount_path << " to " << relative;
-  //   throw Orthanc::OrthancException(Orthanc::ErrorCode_FileStorageCannotWrite);
-  // }
 }
 
 void StorageArea::ReadWhole(std::string &target,
                             const std::string &uuid)
 {
   Orthanc::Toolbox::ElapsedTimer timer;
-  LOG(INFO) << "StorageArea::ReadWhole string attachment \"" << uuid << "\"";
+  LOG(INFO) << "SaolaStorageArea::ReadWhole string attachment \"" << uuid << "\"";
 
   boost::filesystem::path root_path = GetPathInternal(root_, uuid).string();
   std::string root_path_extension = root_path.string() + EXTENSION;
@@ -357,14 +376,14 @@ void StorageArea::ReadWhole(std::string &target,
     Orthanc::SystemToolbox::ReadFile(target, root_path.c_str());
   }
 
-  LOG(INFO) << "StorageArea::ReadWhole string attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target.size()) << ")";
+  LOG(INFO) << "SaolaStorageArea::ReadWhole string attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target.size()) << ")";
 }
 
 void StorageArea::ReadWhole(OrthancPluginMemoryBuffer64 *target,
                             const std::string &uuid)
 {
   Orthanc::Toolbox::ElapsedTimer timer;
-  LOG(INFO) << "StorageArea::ReadWhole OrthancPluginMemoryBuffer64 attachment \"" << uuid << "\"";
+  LOG(INFO) << "SaolaStorageArea::ReadWhole OrthancPluginMemoryBuffer64 attachment \"" << uuid << "\"";
 
   boost::filesystem::path root_path = GetPathInternal(root_, uuid).string();
   std::string root_path_extension = root_path.string() + EXTENSION;
@@ -379,7 +398,7 @@ void StorageArea::ReadWhole(OrthancPluginMemoryBuffer64 *target,
     ReadWholeFromPath(target, root_path.string());
   }
 
-  LOG(INFO) << "StorageArea::ReadWhole OrthancPluginMemoryBuffer64 attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
+  LOG(INFO) << "SaolaStorageArea::ReadWhole OrthancPluginMemoryBuffer64 attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
 }
 
 void StorageArea::ReadRange(OrthancPluginMemoryBuffer64 *target,
@@ -387,7 +406,7 @@ void StorageArea::ReadRange(OrthancPluginMemoryBuffer64 *target,
                             uint64_t rangeStart)
 {
   Orthanc::Toolbox::ElapsedTimer timer;
-  LOG(INFO) << "StorageArea::ReadRange attachment \"" << uuid << "\" content type (range from: " << rangeStart << ")";
+  LOG(INFO) << "SaolaStorageArea::ReadRange attachment \"" << uuid << "\" content type (range from: " << rangeStart << ")";
 
   boost::filesystem::path root_path = GetPathInternal(root_, uuid).string();
   std::string root_path_extension = root_path.string() + EXTENSION;
@@ -402,13 +421,13 @@ void StorageArea::ReadRange(OrthancPluginMemoryBuffer64 *target,
     ReadRangeFromPath(target, root_path.string(), rangeStart);
   }
 
-  LOG(INFO) << "StorageArea::ReadRange attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
+  LOG(INFO) << "SaolaStorageArea::ReadRange attachment \"" << uuid << "\" (" << timer.GetHumanTransferSpeed(true, target->size) << ")";
 }
 
 void StorageArea::RemoveAttachment(const std::string &uuid)
 {
   Orthanc::Toolbox::ElapsedTimer timer;
-  LOG(INFO) << "StorageArea::RemoveAttachment deleting attachment \"" << uuid << "\"";
+  LOG(INFO) << "SaolaStorageArea::RemoveAttachment deleting attachment \"" << uuid << "\"";
 
   boost::filesystem::path root_path = GetPathInternal(root_, uuid);
 
@@ -416,7 +435,7 @@ void StorageArea::RemoveAttachment(const std::string &uuid)
   {
     if (Orthanc::SystemToolbox::IsExistingFile(root_path.string() + EXTENSION))
     {
-      LOG(INFO) << "StorageArea::RemoveAttachment Found and Deleting symlink file " << root_path.string() + EXTENSION;
+      LOG(INFO) << "SaolaStorageArea::RemoveAttachment Found and Deleting symlink file " << root_path.string() + EXTENSION;
       root_path.concat(EXTENSION);
 
       std::string floc;
@@ -428,14 +447,14 @@ void StorageArea::RemoveAttachment(const std::string &uuid)
       boost::filesystem::remove(root_path.parent_path(), err);
       boost::filesystem::remove(root_path.parent_path().parent_path(), err);
 
-      LOG(INFO) << "StorageArea::RemoveAttachment Found and Deleting mount file " << mount_path;
+      LOG(INFO) << "SaolaStorageArea::RemoveAttachment Found and Deleting mount file " << mount_path;
       boost::filesystem::remove(mount_path, err);
       boost::filesystem::remove(mount_path.parent_path(), err);
       boost::filesystem::remove(mount_path.parent_path().parent_path(), err);
     }
     else
     {
-      LOG(INFO) << "StorageArea::RemoveAttachment Deleting regular file " << root_path.string() + EXTENSION;
+      LOG(INFO) << "SaolaStorageArea::RemoveAttachment Deleting regular file " << root_path.string() + EXTENSION;
       boost::system::error_code err;
       boost::filesystem::remove(root_path, err);
       boost::filesystem::remove(root_path.parent_path(), err);
@@ -447,7 +466,7 @@ void StorageArea::RemoveAttachment(const std::string &uuid)
     // Ignore the error
   }
 
-  LOG(INFO) << "StorageArea::RemoveAttachment deleted attachment \"" << uuid << "\" (" << timer.GetHumanElapsedDuration() << ")";
+  LOG(INFO) << "SaolaStorageArea::RemoveAttachment deleted attachment \"" << uuid << "\" (" << timer.GetHumanElapsedDuration() << ")";
 }
 
 std::string StorageArea::GetPath(const std::string &uuid) const
