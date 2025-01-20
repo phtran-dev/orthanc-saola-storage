@@ -1,0 +1,8 @@
+# ignore ALL .vscode files
+.vscode/
+
+# ignore ALL files in ANY directory named build, ThirdPartyDownloads
+build/
+ThirdPartyDownloads/
+
+

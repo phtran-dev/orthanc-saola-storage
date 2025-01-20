@@ -1,5 +1,6 @@
 #pragma once
 
+#include <json/value.h>
 #include <string>
 
 class SaolaConfiguration
@@ -10,7 +11,7 @@ private:
 
   int maxRetry_ = 5;
 
-  bool is_storage_path_format_full_ = false;
+  std::string storagePathFormat_;
 
   std::string root_;
 
@@ -41,5 +42,11 @@ public:
   int DelayedDeletionThrottleDelayMs() const;
 
   const std::string& DelayedDeletionPath() const;
+
+  void ApplyConfiguration(const Json::Value& config);
+
+  void ToJson(Json::Value& value) const;
+
+  const std::string ToJsonString() const;
 
 };

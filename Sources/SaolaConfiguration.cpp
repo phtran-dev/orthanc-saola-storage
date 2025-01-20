@@ -5,9 +5,8 @@
 #include <Logging.h>
 #include <boost/filesystem.hpp>
 
-
 static const char *ENABLE = "Enable";
-static const char* ROOT = "Root";
+static const char *ROOT = "Root";
 static const char *DELAYED_DELETION = "DelayedDeletion";
 static const char *SAOLA_STORAGE = "SaolaStorage";
 static const char *MOUNT_DIRECTORY = "MountDirectory";
@@ -26,12 +25,7 @@ SaolaConfiguration::SaolaConfiguration(/* args */)
 
   this->mount_directory_ = saola.GetStringValue(MOUNT_DIRECTORY, "fs1");
 
-  std::string format = saola.GetStringValue(STORAGE_PATH_FORMAT, "FULL");
-  Orthanc::Toolbox::ToUpperCase(format);
-  if (format == "FULL")
-  {
-    this->is_storage_path_format_full_ = true;
-  }
+  this->storagePathFormat_ = saola.GetStringValue(STORAGE_PATH_FORMAT, "FULL");
 
   this->delayedDeletionEnable_ = delayedDeletionConfig.GetBooleanValue(ENABLE, false);
   this->delayedDeletionThrottleDelayMs_ = delayedDeletionConfig.GetIntegerValue("ThrottleDelayMs", 0);
@@ -57,10 +51,10 @@ bool SaolaConfiguration::IsEnabled() const
 
 bool SaolaConfiguration::IsStoragePathFormatFull() const
 {
-  return this->is_storage_path_format_full_;
+  return this->storagePathFormat_ == "FULL";
 }
 
-const std::string& SaolaConfiguration::GetRoot() const
+const std::string &SaolaConfiguration::GetRoot() const
 {
   return this->root_;
 }
@@ -83,4 +77,59 @@ int SaolaConfiguration::DelayedDeletionThrottleDelayMs() const
 const std::string &SaolaConfiguration::DelayedDeletionPath() const
 {
   return this->delayedDeletionPath_;
+}
+
+void SaolaConfiguration::ApplyConfiguration(const Json::Value& config)
+{
+  if (config.isMember("MountDirectory"))
+  {
+    this->mount_directory_ = config["MountDirectory"].asString();
+  }
+  if (config.isMember("StoragePathFormat"))
+  {
+    this->storagePathFormat_ = config["StoragePathFormat"].asString();
+  }
+  if (config.isMember("MaxRetry"))
+  {
+    this->maxRetry_ = config["MaxRetry"].asInt();
+  }
+  // if (config.isMember("DelayedDeletion"))
+  // {
+  //   const Json::Value& delayDeletionConfig = config["DelayedDeletion"];
+  //   if (delayDeletionConfig.isMember("Enable"))
+  //   {
+  //     this->delayedDeletionEnable_ = delayDeletionConfig["Enable"].asBool();
+
+  //   }
+  //   if (delayDeletionConfig.isMember("ThrottleDelayMs"))
+  //   {
+  //     this->delayedDeletionThrottleDelayMs_ = delayDeletionConfig["ThrottleDelayMs"].asInt();
+
+  //   }
+  //   if (delayDeletionConfig.isMember("Path"))
+  //   {
+  //     this->delayedDeletionPath_ = delayDeletionConfig["Path"].asString();
+  //   }
+  // }
+}
+
+void SaolaConfiguration::ToJson(Json::Value &json) const
+{
+  json["Enable"] = this->enable_;
+  json["MountDirectory"] = this->mount_directory_;
+  json["StoragePathFormat"] = this->storagePathFormat_;
+  json["MaxRetry"] = 5;
+  json["DelayedDeletion"] = Json::objectValue;
+  json["DelayedDeletion"]["Enable"] = this->delayedDeletionEnable_;
+  json["DelayedDeletion"]["ThrottleDelayMs"] = this->delayedDeletionThrottleDelayMs_;
+  json["DelayedDeletion"]["Path"] = this->delayedDeletionPath_;
+}
+
+const std::string SaolaConfiguration::ToJsonString() const
+{
+  Json::Value json = Json::objectValue;
+  this->ToJson(json);
+  std::string s;
+  Orthanc::Toolbox::WriteStyledJson(s, json);
+  return s;
 }

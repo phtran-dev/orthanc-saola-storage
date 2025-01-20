@@ -24,6 +24,7 @@
 #include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
 #include <Logging.h>
+#include <Toolbox.h>
 #include <Enumerations.h>
 #include <orthanc/OrthancCPlugin.h>
 #include <IDynamicObject.h>
@@ -32,6 +33,8 @@
 #include <boost/thread.hpp>
 
 static std::shared_ptr<StorageArea> storageArea_;
+
+static const char *const SAOLA_STORAGE = "SaolaStorage";
 
 static const char *const ORTHANC_STORAGE = "OrthancStorage";
 
@@ -111,6 +114,35 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
   }
 
   return OrthancPluginErrorCode_Success;
+}
+
+void GetPluginConfiguration(OrthancPluginRestOutput *output,
+                            const char *url,
+                            const OrthancPluginHttpRequest *request)
+{
+  const std::string &s = SaolaConfiguration::Instance().ToJsonString();
+  OrthancPluginAnswerBuffer(OrthancPlugins::GetGlobalContext(), output, s.c_str(),
+                            s.size(), "application/json");
+}
+
+void ApplyPluginConfiguration(OrthancPluginRestOutput *output,
+                              const char *url,
+                              const OrthancPluginHttpRequest *request)
+{
+  Json::Value target;
+  Orthanc::Toolbox::ReadJsonWithoutComments(target, request->body, request->bodySize);
+  OrthancPlugins::OrthancConfiguration config(target, "SaolaStorage"), saolaSection;
+  if (!config.IsSection(SAOLA_STORAGE))
+  {
+    return OrthancPluginSendHttpStatusCode(OrthancPlugins::GetGlobalContext(), output, 400);
+  }
+
+  config.GetSection(saolaSection, SAOLA_STORAGE);
+  SaolaConfiguration::Instance().ApplyConfiguration(saolaSection.GetJson());
+
+  const std::string &s = SaolaConfiguration::Instance().ToJsonString();
+  OrthancPluginAnswerBuffer(OrthancPlugins::GetGlobalContext(), output, s.c_str(),
+                            s.size(), "application/json");
 }
 
 void GetPluginStatus(OrthancPluginRestOutput *output,
@@ -258,7 +290,9 @@ extern "C"
 
       OrthancPluginRegisterStorageArea2(context, StorageCreate, StorageReadWhole, StorageReadRange, StorageRemove);
       OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
-      OrthancPlugins::RegisterRestCallback<GetPluginStatus>(SaolaConfiguration::Instance().GetRoot() + "/delayed-deletion/status", true);
+      OrthancPlugins::RegisterRestCallback<GetPluginConfiguration>(SaolaConfiguration::Instance().GetRoot() + ORTHANC_PLUGIN_NAME + "/configuration", true);
+      OrthancPlugins::RegisterRestCallback<ApplyPluginConfiguration>(SaolaConfiguration::Instance().GetRoot() + ORTHANC_PLUGIN_NAME + "/configuration/apply", true);
+      OrthancPlugins::RegisterRestCallback<GetPluginStatus>(SaolaConfiguration::Instance().GetRoot() + ORTHANC_PLUGIN_NAME + "/delayed-deletion/status", true);
     }
     else
     {
