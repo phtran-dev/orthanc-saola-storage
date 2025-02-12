@@ -7,6 +7,7 @@
 
 static const char *ENABLE = "Enable";
 static const char *ROOT = "Root";
+static const char *FILTER_INCOMING_DICOM_INSTANCE = "FilterIncomingDicomInstance";
 static const char *DELAYED_DELETION = "DelayedDeletion";
 static const char *SAOLA_STORAGE = "SaolaStorage";
 static const char *MOUNT_DIRECTORY = "MountDirectory";
@@ -23,9 +24,11 @@ SaolaConfiguration::SaolaConfiguration(/* args */)
 
   this->root_ = saola.GetStringValue(ROOT, "/saola/");
 
-  this->mount_directory_ = saola.GetStringValue(MOUNT_DIRECTORY, "fs1");
+  this->mountDirectory_ = saola.GetStringValue(MOUNT_DIRECTORY, "fs1");
 
   this->storagePathFormat_ = saola.GetStringValue(STORAGE_PATH_FORMAT, "FULL");
+
+  this->filterIncomingDicomInstance_ = saola.GetBooleanValue(FILTER_INCOMING_DICOM_INSTANCE, false);
 
   this->delayedDeletionEnable_ = delayedDeletionConfig.GetBooleanValue(ENABLE, false);
   this->delayedDeletionThrottleDelayMs_ = delayedDeletionConfig.GetIntegerValue("ThrottleDelayMs", 0);
@@ -61,12 +64,17 @@ const std::string &SaolaConfiguration::GetRoot() const
 
 const std::string &SaolaConfiguration::GetMountDirectory() const
 {
-  return this->mount_directory_;
+  return this->mountDirectory_;
 }
 
 bool SaolaConfiguration::DelayedDeletionEnable() const
 {
   return this->delayedDeletionEnable_;
+}
+
+bool SaolaConfiguration::FilterIncomingDicomInstance() const
+{
+  return this->filterIncomingDicomInstance_;
 }
 
 int SaolaConfiguration::DelayedDeletionThrottleDelayMs() const
@@ -83,7 +91,7 @@ void SaolaConfiguration::ApplyConfiguration(const Json::Value& config)
 {
   if (config.isMember("MountDirectory"))
   {
-    this->mount_directory_ = config["MountDirectory"].asString();
+    this->mountDirectory_ = config["MountDirectory"].asString();
   }
   if (config.isMember("StoragePathFormat"))
   {
@@ -116,7 +124,7 @@ void SaolaConfiguration::ApplyConfiguration(const Json::Value& config)
 void SaolaConfiguration::ToJson(Json::Value &json) const
 {
   json["Enable"] = this->enable_;
-  json["MountDirectory"] = this->mount_directory_;
+  json["MountDirectory"] = this->mountDirectory_;
   json["StoragePathFormat"] = this->storagePathFormat_;
   json["MaxRetry"] = 5;
   json["DelayedDeletion"] = Json::objectValue;

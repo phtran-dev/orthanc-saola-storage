@@ -15,9 +15,11 @@ private:
 
   std::string root_;
 
-  std::string mount_directory_;
+  std::string mountDirectory_;
 
   bool delayedDeletionEnable_;
+
+  bool filterIncomingDicomInstance_;
 
   int delayedDeletionThrottleDelayMs_ = 0;
 
@@ -38,6 +40,8 @@ public:
   const std::string& GetMountDirectory() const;
 
   bool DelayedDeletionEnable() const;
+
+  bool FilterIncomingDicomInstance() const;
 
   int DelayedDeletionThrottleDelayMs() const;
 

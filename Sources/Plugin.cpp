@@ -28,6 +28,9 @@
 #include <Enumerations.h>
 #include <orthanc/OrthancCPlugin.h>
 #include <IDynamicObject.h>
+#include <DicomFormat/DicomInstanceHasher.h>
+#include <SerializationToolbox.h>
+#include <SystemToolbox.h>
 
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
@@ -250,6 +253,80 @@ static OrthancPluginErrorCode StorageRemove(const char *uuid,
   }
 }
 
+OrthancPluginReceivedInstanceAction ReceivedInstanceCallback(OrthancPluginMemoryBuffer64 *modifiedDicomBuffer,
+                                                             const void *receivedDicomBuffer,
+                                                             uint64_t receivedDicomBufferSize,
+                                                             OrthancPluginInstanceOrigin origin)
+{
+  {
+    OrthancPlugins::OrthancString s;
+    s.Assign(OrthancPluginDicomBufferToJson(OrthancPlugins::GetGlobalContext(), receivedDicomBuffer, receivedDicomBufferSize,
+                                            OrthancPluginDicomToJsonFormat_Short,
+                                            OrthancPluginDicomToJsonFlags_None, 256));
+
+    Json::Value json;
+    s.ToJson(json);
+
+    LOG(INFO) << "PHONG ReceivedInstanceCallback json=" << json.toStyledString();
+
+    static const char *const PATIENT_ID = "0010,0020";
+    static const char *const STUDY_INSTANCE_UID = "0020,000d";
+    static const char *const SERIES_INSTANCE_UID = "0020,000e";
+    static const char *const SOP_INSTANCE_UID = "0008,0018";
+
+    // Orthanc::DicomInstanceHasher hasher(
+    //   json.isMember(PATIENT_ID) ? Orthanc::SerializationToolbox::ReadString(json, PATIENT_ID) : "",
+    //   Orthanc::SerializationToolbox::ReadString(json, STUDY_INSTANCE_UID),
+    //   Orthanc::SerializationToolbox::ReadString(json, SERIES_INSTANCE_UID),
+    //   Orthanc::SerializationToolbox::ReadString(json, SOP_INSTANCE_UID));
+
+    // instanceId = hasher.HashInstance();
+    // return true;
+  }
+
+  memcpy(modifiedDicomBuffer->data, receivedDicomBuffer, receivedDicomBufferSize);
+
+  return OrthancPluginReceivedInstanceAction_Modify;
+}
+
+static int32_t FilterIncomingDicomInstance(const OrthancPluginDicomInstance *instance)
+{
+  OrthancPlugins::OrthancString s;
+  s.Assign(OrthancPluginGetInstanceJson(OrthancPlugins::GetGlobalContext(), instance));
+
+  Json::Value json;
+  s.ToJson(json);
+
+  static const char *const PATIENT_ID = "0010,0020";
+  static const char *const STUDY_INSTANCE_UID = "0020,000d";
+  static const char *const SERIES_INSTANCE_UID = "0020,000e";
+  static const char *const SOP_INSTANCE_UID = "0008,0018";
+  static const char *const VALUE = "Value";
+
+  const std::string& studyInstanceUID = Orthanc::SerializationToolbox::ReadString(json[STUDY_INSTANCE_UID], VALUE);
+  const std::string& seriesInstanceUID = Orthanc::SerializationToolbox::ReadString(json[STUDY_INSTANCE_UID], VALUE);
+  const std::string& sopInstanceUID = Orthanc::SerializationToolbox::ReadString(json[SOP_INSTANCE_UID], VALUE);
+
+  Orthanc::DicomInstanceHasher hasher(
+      json.isMember(PATIENT_ID) ? Orthanc::SerializationToolbox::ReadString(json[PATIENT_ID], VALUE) : "",
+      Orthanc::SerializationToolbox::ReadString(json[STUDY_INSTANCE_UID], VALUE),
+      Orthanc::SerializationToolbox::ReadString(json[SERIES_INSTANCE_UID], VALUE),
+      Orthanc::SerializationToolbox::ReadString(json[SOP_INSTANCE_UID], VALUE));
+
+  const std::string &instanceId = hasher.HashInstance();
+
+  Json::Value stats;
+  if (OrthancPlugins::RestApiGet(stats, "/instances/" + instanceId + "/statistics", false) && !stats.isNull() && !stats.empty())
+  {
+    /* Reject instance if already existing */
+    LOG(INFO) << "[OrthancStorage] FilterIncomingDicomInstance InstanceID already existing: " << instanceId << " , discard incomming StudyInstanceUID " << studyInstanceUID
+              << ", SeriesInstanceUID " << seriesInstanceUID << ", SOPInstanceUID " << sopInstanceUID;
+    return 0;
+  }
+
+  return 1;
+}
+
 extern "C"
 {
   ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext *context)
@@ -286,6 +363,11 @@ extern "C"
       {
         LOG(ERROR) << "[SaolaStorage] ERROR Native exception while initializing the plugin";
         return -1;
+      }
+      // OrthancPluginRegisterReceivedInstanceCallback(context, ReceivedInstanceCallback);
+      if (SaolaConfiguration::Instance().FilterIncomingDicomInstance())
+      {
+        OrthancPluginRegisterIncomingDicomInstanceFilter(context, FilterIncomingDicomInstance);
       }
 
       OrthancPluginRegisterStorageArea2(context, StorageCreate, StorageReadWhole, StorageReadRange, StorageRemove);

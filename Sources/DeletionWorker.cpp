@@ -14,8 +14,6 @@ namespace Saola
 {
   void DeletionWorker::Run()
   {
-    static const unsigned int GRANULARITY = 100; // In milliseconds
-
     std::string uuid;
     Orthanc::FileContentType type = Orthanc::FileContentType_Dicom; // Dummy initialization
 
@@ -107,7 +105,7 @@ namespace Saola
   {
     if (this->m_state == State_Running)
     {
-      OrthancPlugins::LogError("[SaolaStorage][DelayedDeletion]::Stop() should have been manually called");
+      LOG(ERROR) << "[SaolaStorage][DelayedDeletion]::Stop() should have been manually called";
       Stop();
     }
   }
