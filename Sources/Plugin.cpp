@@ -267,8 +267,6 @@ OrthancPluginReceivedInstanceAction ReceivedInstanceCallback(OrthancPluginMemory
     Json::Value json;
     s.ToJson(json);
 
-    LOG(INFO) << "PHONG ReceivedInstanceCallback json=" << json.toStyledString();
-
     static const char *const PATIENT_ID = "0010,0020";
     static const char *const STUDY_INSTANCE_UID = "0020,000d";
     static const char *const SERIES_INSTANCE_UID = "0020,000e";
@@ -316,7 +314,7 @@ static int32_t FilterIncomingDicomInstance(const OrthancPluginDicomInstance *ins
   const std::string &instanceId = hasher.HashInstance();
 
   Json::Value stats;
-  if (OrthancPlugins::RestApiGet(stats, "/instances/" + instanceId + "/statistics", false) && !stats.isNull() && !stats.empty())
+  if (OrthancPlugins::RestApiGet(stats, "/instances/" + instanceId, false) && !stats.isNull() && !stats.empty())
   {
     /* Reject instance if already existing */
     LOG(INFO) << "[OrthancStorage] FilterIncomingDicomInstance InstanceID already existing: " << instanceId << " , discard incomming StudyInstanceUID " << studyInstanceUID
